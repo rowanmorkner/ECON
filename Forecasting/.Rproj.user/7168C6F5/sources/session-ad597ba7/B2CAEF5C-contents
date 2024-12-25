@@ -1,0 +1,95 @@
+---
+title: "Econometrics"
+output: html_document
+date: "2024-12-18"
+---
+loading libraries
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+library(plotly)
+library(dplyr)
+library(mFilter)
+library(tidyr)
+library(readxl)
+library(haven)
+```
+
+loading and cutting down data
+```{r}
+data <- read.csv("quartly.csv")
+
+# Remove the 'factors' and 'transform' rows
+data <- data[-c(1, 2), ]
+
+# Convert 'sasdate' to Date format
+data$sasdate <- as.Date(data$sasdate, format = "%m/%d/%Y")
+#remove all non relevant data
+data <- data %>%
+  select(sasdate, CPIAUCSL, UNRATE)
+data$CPIAUCSL_yoy <- (data$CPIAUCSL / lag(data$CPIAUCSL, 4) - 1) * 100
+
+```
+
+```{r}
+nrou <- read.csv("NROU.csv")
+#set date and rename
+nrou$observation_date <- as.Date(nrou$observation_date)
+nrou <- nrou %>%
+  rename(sasdate = observation_date)
+
+# Shift the dates in 'data' back by one month to align observations
+nrou$sasdate <- nrou$sasdate %m-% months(1)
+
+```
+
+
+```{r}
+spf <- read_excel("Inflation.xlsx")
+
+spf <- spf %>%
+  mutate(sasdate = case_when(
+    QUARTER == 1 ~ paste0(YEAR, "-03-01"),
+    QUARTER == 2 ~ paste0(YEAR, "-06-01"),
+    QUARTER == 3 ~ paste0(YEAR, "-09-01"),
+    QUARTER == 4 ~ paste0(YEAR, "-12-01"),
+    TRUE ~ NA_character_  # Handle unexpected cases
+  ))
+
+spf$sasdate <- as.Date(spf$sasdate)
+
+spf <- spf %>%
+  select(sasdate, INFPGDP1YR, INFCPI1YR, INFCPI10YR, sasdate)
+spf <- spf %>%
+  mutate(across(where(is.character), ~ na_if(., "#N/A")))
+
+```
+
+```{r}
+#merging the data frames and remove na values
+
+data <- full_join(data, nrou, by = "sasdate") %>%
+  arrange(sasdate)
+
+data <- full_join(data, spf, by = "sasdate") %>%
+  arrange(sasdate)
+
+#data <- data %>%
+  #drop_na()
+
+```
+
+```{r}
+write_dta(data, "metricsProj.dta")
+
+```
+
+
+
+
+
+
+
+

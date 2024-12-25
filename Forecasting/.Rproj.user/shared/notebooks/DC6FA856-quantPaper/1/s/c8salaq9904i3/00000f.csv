@@ -1,0 +1,12 @@
+"0",""
+"0","ggplot(data, aes(x = sasdate)) +"
+"0","  geom_line(aes(y = CPIAUCSL_yoy, color = ""Inflation rate"")) +"
+"0","  "
+"0","  labs(title = ""Inflation Measures Over Time"","
+"0","       x = ""Date"","
+"0","       y = ""Inflation"","
+"0","       color = ""Variable"") +"
+"0","  theme_minimal()"
+"2","Warning:"
+"2"," [38;5;250mRemoved 4 rows containing missing values or values outside the scale range (`geom_line()`).[39m
+"

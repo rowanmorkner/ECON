@@ -1,0 +1,3 @@
+"0",""
+"0","# Plot the actual subset vs. the fitted curve"
+"0","plot(subset$cum_pop_percent, subset$cum_inc_percent, type = ""p"", col = ""blue"", main = ""Estimated Curve"", xlab = ""Cumulative Population Percent"", ylab = ""Cumulative Income Percent"")"

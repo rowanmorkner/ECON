@@ -1,0 +1,233 @@
+---
+title: "Lorenz Curve and Gini"
+author: "Rowan, Mamoru, Ari, Gwen"
+format: pdf
+editor: visual
+execute: 
+  eval: true
+  echo: false
+  warning: false # Suppress warnings
+  message: false # Suppress messages
+---
+
+To calculate the Gini index we first needed to estimate the coefficients of the Lorenz curve. To do this we downloaded a data set from Ipums USA which contained individual, household level, census data about the total yearly income of each household. We cleaned and ordered the data, and then calculated a cumulative population percentage, and a cumulative income percentage variable. When we graph them against each other we can see that classically shaped Lorenz curve emerge:
+
+```{r, echo=FALSE}
+
+library("haven")
+library("ggplot2")
+library("dplyr")
+
+data <- read_dta("sample_data.dta")
+
+# these were just useful for me because the data set I had was way too big. 
+#data <- data[sample(nrow(data), size = .15 * nrow(data)), ]
+
+#file_path <- "/Users/rowanmorkner/Documents/school/gitHubRepo/lorenzeCurve/sample_data.dta"
+#write_dta(data, file_path)
+
+
+
+data <- data %>% filter(inctot <= 9999998)
+ 
+#order the data from least to greatest
+data <- data[order(data$inctot), ]
+
+#create a variable for the row numbe 
+data$observation_number <- 1:nrow(data)
+
+#find the sum of total income so we can claculate the percentage of the total each person earns
+
+subset <- subset(data, inctot >= 0)
+
+total_inc <- sum(subset$inctot)
+
+```
+
+```{r}
+
+#create a new variable to store the percentage contribution of each observation
+subset$inc_percent <- (subset$inctot / total_inc)
+
+#make a variable to hold the cumulative percentage 
+subset$cum_inc_percent <- cumsum(subset$inc_percent)
+
+#make a variable that stores the percentage of the total sample each observation makes up:e 1/N where
+subset$pop_percent <- (1/nrow(subset))
+
+subset$cum_pop_percent <- cumsum(subset$pop_percent)
+
+#plot the chart
+plot(subset$cum_pop_percent, subset$cum_inc_percent, type = "b", col = "blue")
+
+# Add grid lines
+
+
+
+```
+
+Next we needed to estimate the coefficients of the model. As we know, the Gini coefficient is given by:
+
+$$
+G = 1 - 2 \int_{0}^{1} l(x) dx
+$$
+
+Where:
+
+$$
+l(x) = x-(ax^a(1-x)^b)
+$$
+
+Therefore we need to use a nonlinear least squares estimation method to estimate the coefficients for a and b. Here you can see the code we ran, and the results for the estimated coefficients for the model. Part of the equation is cut off the edge of the screen due to the pdf rendering method we are using, I couldn't figure it out in time.
+
+```{r, echo=TRUE, message = TRUE}
+
+lorenz_model<- nls(cum_inc_percent ~ cum_pop_percent - (a * cum_pop_percent^a * (1 -
+                                                                               cum_pop_percent)^beta), 
+                        data  = subset,
+                        start = list(a = 0.5, beta = 0.5),  # Starting values for parameters
+                        lower = c(a = 0, beta = 0),  # Lower bounds to ensure positivity
+                        upper = c(a = 10, beta = 10), # Upper bounds
+                        algorithm = "port")  # Port algorithm for bounded fitting
+
+subset$fitted_values_new <- predict(lorenz_model)
+
+print(lorenz_model)
+
+```
+
+After estimating the coefficients, we can graph the estimated curve against the actual observed data to check if it visually appears correct.
+
+```{r}
+
+# Plot the actual subset vs. the fitted curve
+plot(subset$cum_pop_percent, subset$cum_inc_percent, type = "p", col = "blue", main = "Estimated Curve", xlab = "Cumulative Population Percent", ylab = "Cumulative Income Percent")
+lines(subset$cum_pop_percent, subset$fitted_values_new, col = "red", lwd =3)
+legend("bottomright", legend = c("Data", "Estimated"), 
+       col = c("blue", "red"), 
+       lty = c(NA, 1),   # No line for points, solid line for the estimated curve
+       pch = c(1, NA),   # Points for data, no points for the estimated curve
+       lwd = c(NA, 3))   # Line width for the estimated curve
+
+```
+
+Finally we can use R to calculate the Gini index by taking the integral of the model, and plugging it into the equation for the Gini index.
+
+```{r, echo= TRUE, message=TRUE}
+# Define the fitted Lorenz curve function based on the estimated parameters a and beta
+lorenz_function <- function(x, a, beta) {
+  x - a * x^a * (1 - x)^beta
+}
+
+# Get the estimated parameters from your model
+a_estimate <- coef(lorenz_model)["a"]
+beta_estimate <- coef(lorenz_model)["beta"]
+
+# Define the function to integrate
+gini_integrand <- function(x) {
+  x - lorenz_function(x, a_estimate, beta_estimate)
+}
+
+# Numerically integrate the function from 0 to 1
+gini_result <- integrate(gini_integrand, lower = 0, upper = 1)
+
+# Calculate the Gini coefficient
+Gini_coefficient <- 1 - 2 * gini_result$value
+
+# Print the Gini coefficient
+print(Gini_coefficient)
+
+
+```
+
+But this is a math class so we are going to show all the math for calculating the integral here:
+
+# Derivation and Computation of the Gini Coefficient
+
+We are given a Lorenz curve model defined as:
+
+$$
+l(x) = x - a x^{a} (1 - x)^{\beta},
+$$
+
+where
+
+$$
+(\alpha = 0.978) and (\beta = 0.413)
+$$
+
+( a = \alpha = 0.978 ) and ( \beta = 0.413 ).
+
+The Gini coefficient ( G ) is defined as:
+
+$$
+G = 1 - 2 \int_0^1 [x - l(x)] \, dx.
+$$
+
+First, we simplify the integrand:
+
+$$
+x - l(x) = x - [x - a x^{a}(1-x)^{\beta}] = a x^{a}(1-x)^{\beta}.
+$$
+
+Thus, the integral we need to evaluate is:
+
+$$
+\int_0^1 [x - l(x)] \, dx = \int_0^1 a x^{a}(1-x)^{\beta} \, dx.
+$$
+
+Factor out ( a ):
+
+$$
+= a \int_0^1 x^{a}(1-x)^{\beta} \, dx.
+$$
+
+Recognize that this integral is related to the Beta function. The Beta function ( B(p,q) ) is defined as:
+
+$$
+B(p,q) = \int_0^1 t^{p-1}(1-t)^{q-1} \, dt.
+$$
+
+Let ( p = a + 1 ) and ( q = \beta + 1 ). Then:
+
+$$
+\int_0^1 x^{a}(1-x)^{\beta} \, dx = B(a+1, \beta+1).
+$$
+
+Using the relationship between the Beta and Gamma functions:
+
+$$
+B(p,q) = \frac{\Gamma(p)\Gamma(q)}{\Gamma(p+q)},
+$$
+
+we have:
+
+$$
+B(a+1,\beta+1) = \frac{\Gamma(a+1)\Gamma(\beta+1)}{\Gamma(a+\beta+2)}.
+$$
+
+Substitute this back into our integral:
+
+$$
+\int_0^1 [x - l(x)] \, dx = a \frac{\Gamma(a+1)\Gamma(\beta+1)}{\Gamma(a+\beta+2)}.
+$$
+
+With ( a = 0.978 ) and ( \beta = 0.413 ), evaluating the Gamma functions numerically (using a computational tool) gives approximately:
+
+$$
+\int_0^1 [x - l(x)] \, dx \approx 0.29.
+$$
+
+Finally, we compute the Gini coefficient:
+
+$$
+G = 1 - 2 \int_0^1 [x - l(x)] \, dx = 1 - 2(0.29) = 1 - 0.58 = 0.42.
+$$
+
+**Conclusion:**
+
+The estimated Gini coefficient is approximately:
+
+$$
+G = 0.42.
+$$

@@ -1,0 +1,432 @@
+---
+title: "Theory of Money Quantitative Preview"
+author: "Rowan Morkner"
+format: pdf
+editor: visual
+---
+
+```{r}
+
+```
+
+```{r}
+library(dplyr)
+data <- read.csv("quartly.csv")
+
+# Set your threshold for "significant" NA percentage (e.g., 20%)
+threshold <- 0.10
+
+# Calculate the percentage of NAs for each column
+na_percentage <- sapply(data, function(x) mean(is.na(x)))
+
+# Identify columns that exceed the threshold
+significant_na_vars <- names(na_percentage[na_percentage > threshold])
+
+# Print the names of columns with significant NA values
+data <- data[, !names(data) %in% significant_na_vars]
+
+#print(colnames(data))
+```
+
+```{r}
+# List of relevant variables for inflation forecasting
+relevant_vars <- c(
+  "sasdate",            # Date variable
+
+  # Inflation Measures
+  "CPIAUCSL",   # Consumer Price Index for All Urban Consumers: All Items
+  "PCECTPI",    # Personal Consumption Expenditures: Chain-type Price Index (replacement for PCEPI)
+  "PPICMM",     # Producer Price Index: All Commodities
+  "WPSFD49207", # PPI: Finished Goods
+  "WPSFD49502", # PPI: Finished Consumer Goods
+  "CUSR0000SAC",# CPI: Commodities
+  "CUSR0000SAD",# CPI: Durables
+  "CUSR0000SAS",# CPI: Services
+
+  # Monetary Aggregates
+  "M1REAL",     # Real M1 Money Stock (replacement for M1SL)
+  "M2REAL",     # Real M2 Money Stock (replacement for M2SL)
+
+  # Interest Rates
+  "FEDFUNDS",   # Effective Federal Funds Rate
+  "TB3MS",      # 3-Month Treasury Bill: Secondary Market Rate
+  "TB6MS",      # 6-Month Treasury Bill: Secondary Market Rate
+  "GS1",        # 1-Year Treasury Constant Maturity Rate
+  "GS5",        # 5-Year Treasury Constant Maturity Rate
+  "GS10",       # 10-Year Treasury Constant Maturity Rate
+  "AAA",        # Moody's Seasoned Aaa Corporate Bond Yield
+  "BAA",        # Moody's Seasoned Baa Corporate Bond Yield
+
+  # Labor Market Indicators
+  "UNRATE",         # Civilian Unemployment Rate
+  "CES0600000007",  # Avg Hourly Earnings: Goods-Producing
+  "AWOTMAN",        # Avg Weekly Overtime Hours: Manufacturing
+  "AWHMAN",         # Avg Weekly Hours: Manufacturing
+
+  # Commodity Prices
+  "WPSID61",    # PPI: Intermediate Materials
+  "WPSID62",    # PPI: Crude Materials
+
+  # Economic Activity Measures
+  "INDPRO",     # Industrial Production Index
+  "IPFINAL",    # Industrial Production: Final Products (replacement for IPFPNSS)
+  "CUMFNS",     # Capacity Utilization: Manufacturing
+
+  # Exchange Rates
+  "EXJPUSx",    # Japan / U.S. Foreign Exchange Rate
+  "EXCAUSx",    # Canada / U.S. Foreign Exchange Rate
+  "EXUSUKx",    # U.S. / U.K. Foreign Exchange Rate
+  "EXSZUSx"     # Switzerland / U.S. Foreign Exchange Rate
+)
+
+# Assuming your original data frame is named 'original_data'
+# Replace 'original_data' with the actual name if it's different
+# Ensure that only existing variables are selected to avoid errors
+existing_vars <- intersect(relevant_vars, names(data))
+
+# Create the filtered data frame 'data' containing only the relevant variables
+data <- data[, existing_vars]
+
+# Optional: View the first few rows of the filtered data frame
+head(data)
+
+
+```
+
+```{r}
+
+# Extract the 'factors' row
+factors <- data[1, ]
+
+# Remove 'sasdate' from the factors (since it's not needed)
+factors$sasdate <- NULL
+
+# Extract the transformation codes from the 'transform' row
+transform_codes <- data[2, ]
+
+# Remove 'sasdate' from the transformation codes
+transform_codes$sasdate <- NULL
+
+# Remove the 'factors' and 'transform' rows
+data <- data[-c(1, 2), ]
+
+# Convert 'sasdate' to Date format
+data$sasdate <- as.Date(data$sasdate, format = "%m/%d/%Y")
+head(data)
+```
+
+make transformations to the indexed variables;
+
+```{r}
+# List of variables for which you want to calculate YoY and QoQ changes
+
+library(dplyr)
+
+# List of variables for which you want to calculate YoY and QoQ changes
+variables <- c("CPIAUCSL", "PPICMM", "WPSFD49207", "WPSFD49502", 
+               "CUSR0000SAC", "CUSR0000SAD", "CUSR0000SAS", "PCECTPI", "M1REAL", "M2REAL", "INDPRO")
+
+
+# Identify variables that do not already have YoY and QoQ variables
+existing_yoy_vars <- paste0(variables, "_yoy")
+existing_qoq_vars <- paste0(variables, "_qoq")
+
+variables_to_process_yoy <- variables[!existing_yoy_vars %in% names(data)]
+variables_to_process_qoq <- variables[!existing_qoq_vars %in% names(data)]
+
+
+# Process YoY variables
+if (length(variables_to_process_yoy) > 0) {
+  data <- data %>%
+    mutate(across(
+      all_of(variables_to_process_yoy),
+      ~ (./lag(., 4) - 1) * 100,
+      .names = "{.col}_yoy"
+    ))
+}
+
+# Process QoQ variables
+if (length(variables_to_process_qoq) > 0) {
+  data <- data %>%
+    mutate(across(
+      all_of(variables_to_process_qoq),
+      ~ (./lag(., 1) - 1) * 100,
+      .names = "{.col}_qoq"
+    ))
+}
+
+
+```
+
+```{r}
+
+ggplot(data, aes(x = sasdate)) +
+  geom_line(aes(y = CPIAUCSL_yoy, color = "Inflation rate")) +
+  
+  labs(title = "Inflation Measures Over Time",
+       x = "Date",
+       y = "Inflation",
+       color = "Variable") +
+  theme_minimal()
+```
+
+```{r}
+
+
+# Load necessary libraries
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+library(forecast)
+
+# Extract start year and quarter
+start_year <- year(min(data$sasdate))
+start_quarter <- quarter(min(data$sasdate))
+
+# Remove rows with NA in CPIAUCSL_yoy
+data_clean <- data %>% filter(!is.na(CPIAUCSL_yoy))
+
+# Create quarterly time series object
+cpi_ts_quarterly <- ts(data_clean$CPIAUCSL_yoy, start = c(start_year, start_quarter), frequency = 4)
+
+# Decompose the time series
+cpi_decomp <- decompose(cpi_ts_quarterly)
+
+# Plot the decomposition
+plot(cpi_decomp)
+
+# Normalize variables for plotting
+data$CPIAUCSL_norm <- (data$CPIAUCSL_yoy - min(data$CPIAUCSL_yoy, na.rm = TRUE)) / 
+                      (max(data$CPIAUCSL_yoy, na.rm = TRUE) - min(data$CPIAUCSL_yoy, na.rm = TRUE))
+
+data$FEDFUNDS_norm <- (data$FEDFUNDS - min(data$FEDFUNDS, na.rm = TRUE)) / 
+                      (max(data$FEDFUNDS, na.rm = TRUE) - min(data$FEDFUNDS, na.rm = TRUE))
+
+# Prepare data for plotting
+plot_data <- data %>% filter(!is.na(CPIAUCSL_norm), !is.na(FEDFUNDS_norm))
+
+# Plot normalized variables
+ggplot(plot_data, aes(x = sasdate)) +
+  geom_line(aes(y = CPIAUCSL_norm, color = "Inflation (CPI YoY)")) +
+  geom_line(aes(y = FEDFUNDS_norm, color = "Federal Funds Rate")) +
+  labs(
+    title = "Normalized Inflation and Federal Funds Rate Over Time",
+    x = "Date",
+    y = "Normalized Values",
+    color = "Variable"
+  ) +
+  theme_minimal()
+
+
+```
+
+```{r}
+
+# Plot Inflation Measures Over Time
+ggplot(data, aes(x = sasdate)) +
+  geom_line(aes(y = CPIAUCSL_yoy, color = "CPIAUCSL_yoy")) +
+  geom_line(aes(y = PCECTPI_yoy, color = "PCECTPI_yoy")) +
+  # geom_line(aes(y = PPICMM_qoq, color = "PPICMM_qoq")) +
+  geom_line(aes(y = WPSFD49207_yoy, color = "WPSFD49207_yoy")) +
+  labs(title = "Inflation Measures Over Time",
+       x = "Date",
+       y = "Index Value",
+       color = "Variable") +
+  theme_minimal()
+
+```
+
+```{r}
+
+# Plot Interest Rates Over Time
+ggplot(data, aes(x = sasdate)) +
+  geom_line(aes(y = FEDFUNDS, color = "FEDFUNDS")) +
+  geom_line(aes(y = GS10, color = "GS10")) +
+  labs(title = "Interest Rates Over Time",
+       x = "Date",
+       y = "Interest Rate (%)",
+       color = "Variable") +
+  theme_minimal()
+
+```
+
+```{r}
+
+# Plot Monetary Aggregates Over Time
+ggplot(data, aes(x = sasdate)) +
+  geom_line(aes(y = M1REAL, color = "M1REAL")) +
+  geom_line(aes(y = M2REAL, color = "M2REAL")) +
+  labs(title = "Monetary Aggregates Over Time",
+       x = "Date",
+       y = "Real Money Stock",
+       color = "Variable") +
+  theme_minimal()
+```
+
+```{r}
+# Plot Monetary Aggregates Over Time
+if(data$M1REAL_yoy > 15)
+  data$M1REAL_yoy <- 0
+
+ggplot(data, aes(x = sasdate)) +
+  geom_line(aes(y = M1REAL_yoy, color = "M1REAL")) +
+  geom_line(aes(y = M2REAL_yoy, color = "M2REAL")) +
+  labs(title = "Monetary Aggregates Over Time",
+       x = "Date",
+       y = "Real Money Stock",
+       color = "Variable") +
+  theme_minimal()
+```
+
+```{r}
+
+# Plot Unemployment Rate Over Time
+p1 <- ggplot(data, aes(x = sasdate, y = UNRATE)) +
+  geom_line(color = "blue") +
+  labs(title = "Unemployment Rate Over Time",
+       x = "Date",
+       y = "Unemployment Rate (%)") +
+  theme_minimal()
+
+# Plot Average Hourly Earnings Over Time
+p2 <- ggplot(data, aes(x = sasdate, y = CES0600000007)) +
+  geom_line(color = "red") +
+  labs(title = "Average Hourly Earnings Over Time",
+       x = "Date",
+       y = "Earnings (USD)") +
+  theme_minimal()
+
+# Arrange the two plots side by side
+library(gridExtra)
+grid.arrange(p1, p2, ncol = 2)
+
+```
+
+```{r}
+# Plot PPI: Intermediate Materials Over Time
+ggplot(data, aes(x = sasdate, y = WPSID61)) +
+  geom_line(color = "darkgreen") +
+  labs(title = "PPI: Intermediate Materials Over Time",
+       x = "Date",
+       y = "Index Value") +
+  theme_minimal()
+
+```
+
+```{r}
+# Plot Industrial Production Index Over Time
+ggplot(data, aes(x = sasdate, y = INDPRO_yoy)) +
+  geom_line(color = "purple") +
+  labs(title = "Industrial Production Index Over Time",
+       x = "Date",
+       y = "Index Value") +
+  theme_minimal()
+
+```
+
+```{r}
+# Plot U.S. Dollar to British Pound Exchange Rate Over Time
+ggplot(data, aes(x = sasdate, y = EXUSUKx)) +
+  geom_line(color = "orange") +
+  labs(title = "Exchange Rate: USD to GBP Over Time",
+       x = "Date",
+       y = "Exchange Rate (USD per GBP)") +
+  theme_minimal()
+
+```
+
+```{r}
+# Install and load 'corrplot' package if not already installed
+if (!require(corrplot)) install.packages("corrplot")
+library(corrplot)
+data_clean <- na.omit(data)
+# Select variables for correlation
+vars_for_corr <- c("CPIAUCSL_yoy", "PCECTPI_yoy", "PPICMM_yoy", "FEDFUNDS", "GS10", "M1REAL_yoy", "M2REAL_yoy", "UNRATE", "INDPRO_yoy")
+
+# Subset the data
+corr_data <- data_clean[, vars_for_corr]
+
+# Compute correlation matrix
+corr_matrix <- cor(corr_data, use = "complete.obs")
+
+# Plot correlation matrix
+corrplot(corr_matrix, method = "color", type = "upper",
+         tl.cex = 0.8, tl.col = "black",
+         title = "Correlation Matrix",
+         mar = c(0,0,1,0))
+
+```
+
+```{r}
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+
+# Ensure data is sorted and calculate CPIAUCSL_yoy if needed
+data <- data %>%
+  arrange(sasdate) %>%
+  mutate(
+    CPIAUCSL_yoy = if_else(is.na(CPIAUCSL_yoy), (CPIAUCSL / lag(CPIAUCSL, 4) - 1) * 100, CPIAUCSL_yoy),
+    Decade = floor(year(sasdate) / 10) * 10
+  )
+
+# Remove rows with NA values
+plot_data <- data %>%
+  filter(!is.na(UNRATE), !is.na(CPIAUCSL_yoy))
+
+# Plot the Phillips Curve
+ggplot(plot_data, aes(x = UNRATE, y = CPIAUCSL_yoy, color = as.factor(Decade))) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE, color = "black") +
+  labs(
+    title = "Phillips Curve: Inflation vs. Unemployment by Decade",
+    x = "Unemployment Rate (%)",
+    y = "Inflation Rate (YoY % Change)",
+    color = "Decade"
+  ) +
+  theme_minimal()
+
+
+```
+
+```{r}
+
+```
+
+```{r}
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+library(plotly)
+
+# Ensure data is sorted and calculate CPIAUCSL_yoy if needed
+data <- data %>%
+  arrange(sasdate) %>%
+  mutate(
+    CPIAUCSL_yoy = if_else(is.na(CPIAUCSL_yoy), (CPIAUCSL / lag(CPIAUCSL, 4) - 1) * 100, CPIAUCSL_yoy),
+    Decade = floor(year(sasdate) / 10) * 10
+  )
+
+
+# Remove rows with NA values
+plot_data <- data %>%
+  filter(!is.na(UNRATE), !is.na(CPIAUCSL_yoy))
+
+# Plot the Phillips Curve
+p <- ggplot(plot_data, aes(x = UNRATE, y = CPIAUCSL_yoy, color = as.factor(Decade))) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(aes(group = as.factor(Decade)), method = "lm", se = FALSE) +
+  labs(
+    title = "Interactive Phillips Curve: Inflation vs. Unemployment by Decade",
+    x = "Unemployment Rate (%)",
+    y = "Inflation Rate (YoY % Change)",
+    color = "Decade"
+  ) +
+  theme_minimal()
+
+# Convert to an interactive plotly object
+ggplotly(p)
+
+```

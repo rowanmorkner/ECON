@@ -1,0 +1,113 @@
+---
+title: "Lorenz curve and Gini"
+author: "Rowan"
+format: html
+editor: visual
+---
+
+```{r}
+
+library("haven")
+library("ggplot2")
+library("dplyr")
+
+data <- read_dta("usa_00001.dta")
+
+
+data <- data %>% filter(inctot <= 9999998)
+ 
+#order the data from least to greatest
+data <- data[order(data$inctot), ]
+
+#create a variable for the row numbe 
+data$observation_number <- 1:nrow(data)
+
+#find the sum of total income so we can claculate the percentage of the total each person earns
+min_income <- min(data$inctot)
+data$inctot_adj <- data$inctot # - min_income
+
+min_income_adj <- min(data$inctot_adj)
+
+total_inc <- sum(data$inctot_adj)
+
+#create a new variable to store the percentage contribution of each observation
+data$inc_percent <- (data$inctot_adj / total_inc)
+
+#make a variable to hold the cumulative percentage 
+data$cum_inc_percent <- cumsum(data$inc_percent)
+
+#make a variable that stores the percentage of the total sample each observation makes up:e 1/N where
+data$pop_percent <- (1/nrow(data))
+
+data$cum_pop_percent <- cumsum(data$pop_percent)
+
+#plot the chart
+plot(data$cum_pop_percent, data$cum_inc_percent, type = "b", col = "blue")
+
+# Add grid lines
+
+
+
+```
+
+```{r}
+#adjust data so there are no negatives 
+# Cap values at 1
+data$cum_inc_percent[data$cum_inc_percent > 1] <- 1
+data$cum_pop_percent[data$cum_pop_percent > 1] <- 1
+
+lorenz_model<- nls(cum_inc_percent ~ cum_pop_percent - a * cum_pop_percent^a * (1 - cum_pop_percent)^beta, 
+                        data = data,
+                        start = list(a = 0.5, beta = 0.5),  # Starting values for parameters
+                        lower = c(a = -10, beta = -10),  # Lower bounds to ensure positivity
+                        upper = c(a = 10, beta = 10), # Upper bounds
+                        algorithm = "port")  # Port algorithm for bounded fitting
+# Starting values for k and P
+
+# View the summary of the model
+summary(lorenz_model)
+
+RSS <- sum(residuals(lorenz_model)^2)  # Residual sum of squares
+TSS <- sum((data$cum_inc_percent - mean(data$cum_inc_percent))^2)  # Total sum of squares
+R2 <- 1 - (RSS / TSS)  # R-squared
+print(R2)
+
+
+data$fitted_values_new <- predict(lorenz_model)
+
+# Plot the actual data vs. the fitted curve
+plot(data$cum_pop_percent, data$cum_inc_percent, type = "p", col = "blue", main = "Estimated Curve", xlab = "Cumulative Population Percent", ylab = "Cumulative Income Percent")
+lines(data$cum_pop_percent, data$fitted_values_new, col = "red")
+
+
+
+```
+
+## 
+
+```{r}
+# Define the fitted Lorenz curve function based on the estimated parameters a and beta
+lorenz_function <- function(x, a, beta) {
+  x - a * x^a * (1 - x)^beta
+}
+
+# Get the estimated parameters from your model
+a_estimate <- coef(lorenz_model)["a"]
+beta_estimate <- coef(lorenz_model)["beta"]
+
+# Define the function to integrate
+gini_integrand <- function(x) {
+  x - lorenz_function(x, a_estimate, beta_estimate)
+}
+
+# Numerically integrate the function from 0 to 1
+gini_result <- integrate(gini_integrand, lower = 0, upper = 1)
+
+# Calculate the Gini coefficient
+Gini_coefficient <- 1 - 2 * gini_result$value
+
+# Print the Gini coefficient
+print(Gini_coefficient)
+
+
+```

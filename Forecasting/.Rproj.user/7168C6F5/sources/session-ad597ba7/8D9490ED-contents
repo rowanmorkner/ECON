@@ -1,0 +1,66 @@
+---
+title: "CHANGING RELATIONSHIPS"
+format: html
+editor: visual
+---
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+library(plotly)
+library(dplyr)
+library(mFilter)
+
+```
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+data <- read.csv("quartly.csv")
+
+
+# Remove the 'factors' and 'transform' rows
+data <- data[-c(1, 2), ]
+
+
+# Convert 'sasdate' to Date format
+data$sasdate <- as.Date(data$sasdate, format = "%m/%d/%Y")
+
+data <- data %>%
+  select(sasdate, CPIAUCSL, UNRATE)
+
+
+# Ensure data is sorted and calculate CPIAUCSL_yoy if needed
+data <- data %>%
+  arrange(sasdate) %>%
+  mutate(
+    CPIAUCSL_yoy = (CPIAUCSL / lag(CPIAUCSL, 4) - 1) * 100,
+    Decade = floor(year(sasdate) / 10) * 10
+  )
+
+
+# Remove rows with NA values
+plot_data <- data %>%
+  filter(!is.na(UNRATE), !is.na(CPIAUCSL_yoy))
+
+# Plot the Phillips Curve
+p <- ggplot(plot_data, aes(x = UNRATE, y = CPIAUCSL_yoy, color = as.factor(Decade))) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(aes(group = as.factor(Decade)), method = "lm", se = FALSE) +
+  labs(
+    title = "Interactive Phillips Curve: Inflation vs. Unemployment by Decade",
+    x = "Unemployment Rate (%)",
+    y = "Inflation Rate (YoY % Change)",
+    color = "Decade"
+  ) +
+  theme_minimal()
+
+# Convert to an interactive plotly object
+ggplotly(p)
+```

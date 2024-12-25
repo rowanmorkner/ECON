@@ -1,0 +1,42 @@
+"0",""
+"0","library(""haven"")"
+"0","library(""ggplot2"")"
+"0","library(""dplyr"")"
+"2","
+Attaching package: ‘dplyr’
+
+"
+"2","The following objects are masked from ‘package:stats’:
+
+    filter, lag
+
+"
+"2","The following objects are masked from ‘package:base’:
+
+    intersect, setdiff, setequal, union
+
+"
+"0","data <- read_dta(""sample_data.dta"")"
+"0",""
+"0","# these were just useful for me because the data set I had was way too big. "
+"0","#data <- data[sample(nrow(data), size = .15 * nrow(data)), ]"
+"0",""
+"0","#file_path <- ""/Users/rowanmorkner/Documents/school/gitHubRepo/lorenzeCurve/sample_data.dta"""
+"0","#write_dta(data, file_path)"
+"0",""
+"0",""
+"0",""
+"0","data <- data %>% filter(inctot <= 9999998)"
+"0"," "
+"0","#order the data from least to greatest"
+"0","data <- data[order(data$inctot), ]"
+"0",""
+"0","#create a variable for the row numbe "
+"0","data$observation_number <- 1:nrow(data)"
+"0",""
+"0","#find the sum of total income so we can claculate the percentage of the total each person earns"
+"0",""
+"0","subset <- subset(data, inctot >= 0)"
+"0",""
+"0","total_inc <- sum(subset$inctot)"
+"0",""

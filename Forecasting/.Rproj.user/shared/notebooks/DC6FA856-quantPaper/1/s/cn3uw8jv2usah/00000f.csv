@@ -1,0 +1,30 @@
+"0","library(dplyr)"
+"2","
+Attaching package: ‘dplyr’
+
+"
+"2","The following objects are masked from ‘package:stats’:
+
+    filter, lag
+
+"
+"2","The following objects are masked from ‘package:base’:
+
+    intersect, setdiff, setequal, union
+
+"
+"0","data <- read.csv(""quartly.csv"")"
+"0",""
+"0","# Set your threshold for ""significant"" NA percentage (e.g., 20%)"
+"0","threshold <- 0.10"
+"0",""
+"0","# Calculate the percentage of NAs for each column"
+"0","na_percentage <- sapply(data, function(x) mean(is.na(x)))"
+"0",""
+"0","# Identify columns that exceed the threshold"
+"0","significant_na_vars <- names(na_percentage[na_percentage > threshold])"
+"0",""
+"0","# Print the names of columns with significant NA values"
+"0","data <- data[, !names(data) %in% significant_na_vars]"
+"0",""
+"0","#print(colnames(data))"

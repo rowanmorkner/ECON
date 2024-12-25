@@ -1,0 +1,20 @@
+"0",""
+"0","library(""haven"")"
+"0","library(""ggplot2"")"
+"0","library(""dplyr"")"
+"2","
+Attaching package: ‘dplyr’
+
+"
+"2","The following objects are masked from ‘package:stats’:
+
+    filter, lag
+
+"
+"2","The following objects are masked from ‘package:base’:
+
+    intersect, setdiff, setequal, union
+
+"
+"0","data <- read_dta(""inctotlarge.dta"")"
+"0","head(data)"

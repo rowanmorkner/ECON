@@ -1,0 +1,6 @@
+"0","legend(""bottomright"", legend = c(""Data"", ""Estimated""), "
+"0","       col = c(""blue"", ""red""), "
+"0","       lty = c(NA, 1),   # No line for points, solid line for the estimated curve"
+"0","       pch = c(1, NA),   # Points for data, no points for the estimated curve"
+"0","       lwd = c(NA, 3))   # Line width for the estimated curve"
+"0",""
